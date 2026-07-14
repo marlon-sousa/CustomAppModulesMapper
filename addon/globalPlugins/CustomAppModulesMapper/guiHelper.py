@@ -160,6 +160,14 @@ class CustomAppModuleMapperSettingPanel(gui.settingsDialogs.SettingsPanel):
         app = self.mappingsList.GetItemText(selected).lower()
         self.mappings[app].action = CustomMappingAction.REMOVE
         self.refreshList()
+        # Keep focus on the list instead of letting it jump to the dialog's OK button when the
+        # Disassociate button we were on becomes disabled. Select a neighbouring row when one remains.
+        count = self.mappingsList.GetItemCount()
+        if count:
+            neighbour = min(selected, count - 1)
+            self.mappingsList.Select(neighbour)
+            self.mappingsList.Focus(neighbour)
+        self.mappingsList.SetFocus()
 
     def onSave(self):
         mustRestart = False

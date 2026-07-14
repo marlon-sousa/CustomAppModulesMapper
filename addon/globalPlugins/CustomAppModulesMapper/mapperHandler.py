@@ -7,11 +7,14 @@
 import os
 import pickle
 import shutil
+import ctypes
+from ctypes import wintypes
 import addonHandler
 import appModules
 import appModuleHandler
 import globalVars
 import pkgutil
+import winUser
 from logHandler import log
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
@@ -92,19 +95,44 @@ def getUnmappedModules() -> List[str]:
 
 
 def getRunningApps() -> List[str]:
-	# Executable names of the applications NVDA currently has an app module for, i.e. the applications
-	# the user has open this session. Used to populate the app picker so mappings can be chosen without
-	# typing. Names are already lowercased by NVDA (see appModuleHandler.getAppNameFromProcessID), which
-	# matches how executables are matched, so they can be compared and stored as-is. NVDA itself is
-	# excluded because mapping NVDA is never meaningful.
-	apps = set()
-	for mod in list(appModuleHandler.runningTable.values()):
+	# Executable names of the applications the user currently has open, used to populate the app picker
+	# so mappings can be chosen without typing. appModuleHandler.runningTable is not enough on its own:
+	# it only lists apps NVDA has already built an app module for this session, which misses many open
+	# apps. So enumerate the processes owning a visible, titled, top-level window (what the user can
+	# actually switch to) and merge in whatever NVDA is already tracking. Names come from the helper
+	# NVDA uses to match executables, so they are lowercased and can be compared and stored as-is.
+	processIDs = set()
+
+	@ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+	def collect(hwnd, _lParam):
 		try:
-			appName = mod.appName
+			if winUser.isWindowVisible(hwnd) and winUser.getWindowText(hwnd):
+				processIDs.add(winUser.getWindowThreadProcessID(hwnd)[0])
+		except Exception:
+			pass
+		return True
+
+	try:
+		ctypes.windll.user32.EnumWindows(collect, 0)
+	except Exception:
+		log.debugWarning("Could not enumerate top-level windows", exc_info=True)
+
+	apps = set()
+	for processID in processIDs:
+		try:
+			appName = appModuleHandler.getAppNameFromProcessID(processID, includeExt=False)
 		except Exception:
 			continue
-		if appName and appName != "nvda":
+		if appName:
 			apps.add(appName)
+	for mod in list(appModuleHandler.runningTable.values()):
+		try:
+			if mod.appName:
+				apps.add(mod.appName)
+		except Exception:
+			continue
+	# NVDA itself is never a meaningful mapping target.
+	apps.discard("nvda")
 	return sorted(apps)
 
 
