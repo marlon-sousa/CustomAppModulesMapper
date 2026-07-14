@@ -33,23 +33,21 @@ class Mapping:
 
 customModulesMapping: List[Mapping]
 
-# The last real (non NVDA) application that had the focus, as a
-# (executableName, currentModuleName, hasSpecificModule) tuple. The settings panel lives inside NVDA's
-# own Settings window, so by the time it is built the focused application is NVDA itself. The global
-# plugin keeps this up to date via event_gainFocus so the panel can still offer to act on the
-# application the user was in right before opening Settings. hasSpecificModule is False when the app
-# only had NVDA's generic base app module, i.e. no app specific behaviour to unassociate.
-_lastForegroundApp: Optional[Tuple[str, str, bool]] = None
+# Executable name and current module of the last real (non NVDA) application that had the focus. The
+# settings panel lives inside NVDA's own Settings window, so by the time it is built the focused
+# application is NVDA itself. The global plugin keeps this up to date via event_gainFocus so the panel
+# can pre-fill the associate dialog with, and select the row for, the application the user was in right
+# before opening Settings.
+_lastForegroundApp: Optional[Tuple[str, str]] = None
 
 
-def setLastForegroundApp(appName: str, moduleName: str, hasSpecificModule: bool):
+def setLastForegroundApp(appName: str, moduleName: str):
 	global _lastForegroundApp
-	_lastForegroundApp = (appName, moduleName, hasSpecificModule)
+	_lastForegroundApp = (appName, moduleName)
 
 
-def getLastForegroundApp() -> Optional[Tuple[str, str, bool]]:
-	# Returns a (executableName, currentModuleName, hasSpecificModule) tuple, or None if no real
-	# application has been seen yet.
+def getLastForegroundApp() -> Optional[Tuple[str, str]]:
+	# Returns a (executableName, currentModuleName) tuple, or None if no real application has been seen.
 	return _lastForegroundApp
 
 

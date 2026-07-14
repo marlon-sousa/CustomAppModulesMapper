@@ -5,7 +5,6 @@
 # See the file COPYING.txt for more details.
 
 import addonHandler
-import appModuleHandler
 import globalPluginHandler
 import globalVars
 import gui
@@ -41,16 +40,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		try:
 			appModule = obj.appModule
 			if appModule is not None and appModule.appName and appModule.appName != "nvda":
-				# When no specific module could be imported for the executable, NVDA falls back to the
-				# generic base AppModule (appModuleHandler.AppModule itself). Recording whether the app
-				# had a specific module lets the panel disable "unassociate" for an app that has no app
-				# specific behaviour to remove in the first place.
-				hasSpecificModule = type(appModule) is not appModuleHandler.AppModule
-				mapperHandler.setLastForegroundApp(
-					appModule.appName,
-					appModule.appModuleName,
-					hasSpecificModule,
-				)
+				mapperHandler.setLastForegroundApp(appModule.appName, appModule.appModuleName)
 		except Exception:
 			log.debugWarning("Could not record focused application", exc_info=True)
 		nextHandler()

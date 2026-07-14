@@ -55,25 +55,24 @@ class CustomAppModuleMapperSettingPanel(gui.settingsDialogs.SettingsPanel):
         # Translators: button that opens the dialog to associate an application with an app module
         # (mapping it to a module, or detaching it by choosing "not associated").
         self.addButton = actionsHelper.addItem(wx.Button(self, label=_("&Associate app...")))
-        # Translators: button that detaches an application from any app module (so NVDA applies no
-        # application specific behaviour to it). Its label is updated at runtime to name the application
-        # it will act on: the selected mapping, or the application the user was last in.
-        self.unassociateButton = actionsHelper.addItem(wx.Button(self, label=_("&Unassociate")))
         # Translators: button that removes the selected custom mapping and restores the original module.
         self.removeButton = actionsHelper.addItem(wx.Button(self, label=_("&Remove mapping")))
         sHelper.addItem(actionsHelper)
         settingsSizer.Fit(self)
         self.bindEvents()
         self.buildMappingsList()
+        self.selectCurrentApp()
 
     def bindEvents(self):
         self.addButton.Bind(wx.EVT_BUTTON, self.onAdd)
-        self.unassociateButton.Bind(wx.EVT_BUTTON, self.onUnassociate)
         self.removeButton.Bind(wx.EVT_BUTTON, self.onRemove)
-        # The unassociate button acts on the selected mapping when there is one, so keep it in sync with
-        # the list selection.
-        self.mappingsList.Bind(wx.EVT_LIST_ITEM_SELECTED, self.onListSelectionChanged)
-        self.mappingsList.Bind(wx.EVT_LIST_ITEM_DESELECTED, self.onListSelectionChanged)
+
+    def selectCurrentApp(self):
+        # Convenience: when the application the user was last in already has a custom mapping, select it
+        # in the list on open, so it is immediately ready to remove or re-associate.
+        current = mapperHandler.getLastForegroundApp()
+        if current:
+            self.selectApp(current[0])
 
     def buildMappingsList(self):
         customModulesMapping = mapperHandler.getCustomModulesMapping()
@@ -105,7 +104,6 @@ class CustomAppModuleMapperSettingPanel(gui.settingsDialogs.SettingsPanel):
         for key in sorted_keys:
             mapping = self.mappings[key]
             self.mappingsList.Append((mapping.app, self.moduleDisplayName(mapping.appModule)))
-        self.updateUnassociateButton()
 
     def moduleDisplayName(self, moduleName: str) -> str:
         # Detached applications are stored as a mapping to the notAssociated sentinel module, but that
@@ -132,103 +130,14 @@ class CustomAppModuleMapperSettingPanel(gui.settingsDialogs.SettingsPanel):
         dialog.Destroy()
         gui.mainFrame.postPopup()
 
-    def stageMapping(self, app: str, moduleName: str):
-        # Stage (but do not yet apply) a mapping of app -> moduleName, reusing the existing entry when
-        # the app is already staged so its original module and ADD/MODIFY state are preserved. Detaching
-        # an app is simply mapping it to the notAssociated sentinel, so this covers both add and detach.
-        app = app.lower()
-        if app in self.mappings:
-            item = self.mappings[app]
-            item.appModule = moduleName
-            if item.action != CustomMappingAction.ADD:
-                # A previously persisted (IGNORE) or removed (REMOVE) mapping becomes a modification.
-                item.action = CustomMappingAction.MODIFY
-        else:
-            originalModule = mapperHandler.getAllConfiguredMappings().get(app, None)
-            self.mappings[app] = CustomMappingItem(app, moduleName, originalModule, CustomMappingAction.ADD)
-        self.refreshList()
-        self.selectApp(app)
-
     def selectApp(self, app: str):
-        # Move selection/focus to the row for the given app so the change is announced and visible.
+        # Move selection/focus to the row for the given app if present, so it is announced and visible.
+        app = app.lower()
         for index in range(self.mappingsList.GetItemCount()):
             if self.mappingsList.GetItemText(index) == app:
                 self.mappingsList.Select(index)
                 self.mappingsList.Focus(index)
                 return
-
-    def isUnassociated(self, app):
-        # True when the app is already staged as detached, so unassociating it again would be a no-op.
-        item = self.mappings.get(app)
-        return item is not None and item.action != CustomMappingAction.REMOVE \
-            and item.appModule == mapperHandler.NOT_ASSOCIATED_MODULE
-
-    def getUnassociateTarget(self):
-        # Resolve which application the Unassociate button acts on and whether it is currently possible.
-        # Returns (app, fromSelection) with app None when there is nothing meaningful to unassociate.
-        # Selection wins: when a mapping is selected the button targets it (all listed mappings are our
-        # own custom associations), unless it is already detached.
-        selected = self.mappingsList.GetFirstSelected()
-        if selected != -1:
-            app = self.mappingsList.GetItemText(selected).lower()
-            if self.isUnassociated(app):
-                return None, True
-            return app, True
-        # No selection: fall back to the last focused application.
-        current = mapperHandler.getLastForegroundApp()
-        if not current:
-            return None, False
-        app, _module, hasSpecificModule = current
-        item = self.mappings.get(app)
-        if item is not None and item.action != CustomMappingAction.REMOVE:
-            # Already a custom association: detachable only if it is not already detached.
-            if item.appModule == mapperHandler.NOT_ASSOCIATED_MODULE:
-                return None, False
-            return app, False
-        # Not one of our associations: only meaningful when the app has a specific module to remove
-        # (an internally associated app). An app with no app module has nothing to unassociate.
-        if hasSpecificModule:
-            return app, False
-        return None, False
-
-    def updateUnassociateButton(self):
-        app, fromSelection = self.getUnassociateTarget()
-        if app is None:
-            # Translators: label of the unassociate button when nothing can be unassociated.
-            self.unassociateButton.SetLabel(_("&Unassociate"))
-            self.unassociateButton.Enable(False)
-        elif fromSelection:
-            # Translators: label of the unassociate button when a mapping is selected. {app} is the
-            # application executable name it will be detached.
-            self.unassociateButton.SetLabel(_("&Unassociate {app}").format(app=app))
-            self.unassociateButton.Enable(True)
-        else:
-            # Translators: label of the unassociate button acting on the current application. {app} is
-            # the application executable name.
-            self.unassociateButton.SetLabel(_("&Unassociate current app ({app})").format(app=app))
-            self.unassociateButton.Enable(True)
-        self.Layout()
-
-    def onListSelectionChanged(self, evt):
-        self.updateUnassociateButton()
-        evt.Skip()
-
-    def onUnassociate(self, evt):
-        # The button is disabled when there is nothing to act on, so target is normally set; the guard is
-        # kept purely defensively.
-        app, _fromSelection = self.getUnassociateTarget()
-        if app is None:
-            return
-        confirmed = wx.MessageBox(
-            # Translators: confirmation shown before detaching an application from its app module. {app}
-            # is the application executable name.
-            _("Unassociate {app} from any app module?").format(app=app),
-            # Translators: title of the confirmation shown before unassociating an application.
-            _("Unassociate"),
-            wx.YES_NO | wx.ICON_QUESTION,
-        )
-        if confirmed == wx.YES:
-            self.stageMapping(app, mapperHandler.NOT_ASSOCIATED_MODULE)
 
     def onRemove(self, evt):
         selected = self.mappingsList.GetFirstSelected()
@@ -337,7 +246,7 @@ class ModuleMappingDialog(
         # it currently uses (including "not associated" if it is already detached).
         if not self.prefill:
             return
-        appName, currentModule, _hasSpecificModule = self.prefill
+        appName, currentModule = self.prefill
         self.appComboBox.SetValue(appName)
         display = self.moduleToDisplay(currentModule)
         if display in self.moduleChoices:
