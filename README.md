@@ -29,17 +29,20 @@ This add-on lets you do both dynamically, straight from the NVDA Settings dialog
 
 Custom mappings are managed in NVDA's Settings dialog, in the **Custom Application Module Mapper** category. It lists your current custom mappings, each showing the application executable name and the module it is mapped to (detached applications are shown as `(not associated)`), with the following actions:
 
-- **Add mapping**: opens a dialog where you choose an application and the module to map it to. The dialog is pre-filled with the application you were in right before opening NVDA's Settings, and with the module that application currently uses, so in the common case you only need to change the module. You can still type any executable name manually.
-- **Unassociate current app**: detaches the application you were in right before opening NVDA's Settings from any app module, so NVDA applies no app specific behavior to it. This is the reliable way to detach the app you are working with: focus it, open NVDA's Settings, and press this button.
+- **Associate app**: opens a dialog where you choose an application and the module to associate it with.
+  - The **application** field is a combo box pre-filled with the applications you currently have open, with the app you were in right before opening NVDA's Settings selected. You can pick another open app or type any executable name by hand.
+  - The **module** list offers `(not associated)` first, then every available module. Choosing a real module maps the app to it; choosing `(not associated)` detaches the app from any app module. This is how you associate, re-map, or unassociate any application, including one that is not currently running.
+  - The confirm button stays disabled until you have both chosen an application and a module, and it will not let you re-select the association the app already has.
+- **Unassociate current app**: a shortcut that detaches the application you were in right before opening NVDA's Settings. It asks for confirmation, naming the application, then detaches it. It is disabled when no application has been focused yet.
 - **Remove mapping**: removes the selected custom mapping and restores the module the application originally used.
 
-Changes take effect when you confirm the Settings dialog.
+Changes take effect when you confirm the Settings dialog. Application names are matched case-insensitively, the same way NVDA matches executables.
 
 ### Features
 
-1. Map any executable to any available app module, whether it is a native NVDA module or one exposed by another add-on.
+1. Associate any executable with any available app module, whether it is a native NVDA module or one exposed by another add-on.
 2. Detach any application from its app module, so it behaves as if no app module were present.
-3. The application to add or unassociate is detected automatically from the app you were last in, so you rarely need to type executable names by hand.
-4. Custom mappings are persisted, so they are kept between NVDA runs.
+3. The applications you have open are offered for selection, with the app you were last in pre-selected, so you rarely need to type executable names by hand.
+4. Custom mappings are persisted, so they are kept between NVDA runs, and are protected against duplicates.
 5. At any time, remove a custom mapping and the original mapping is restored.
 6. Everything is managed through the NVDA Settings dialog, in the Custom Application Module Mapper category.

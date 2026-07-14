@@ -90,6 +90,23 @@ def getUnmappedModules() -> List[str]:
 	return modules
 
 
+def getRunningApps() -> List[str]:
+	# Executable names of the applications NVDA currently has an app module for, i.e. the applications
+	# the user has open this session. Used to populate the app picker so mappings can be chosen without
+	# typing. Names are already lowercased by NVDA (see appModuleHandler.getAppNameFromProcessID), which
+	# matches how executables are matched, so they can be compared and stored as-is. NVDA itself is
+	# excluded because mapping NVDA is never meaningful.
+	apps = set()
+	for mod in list(appModuleHandler.runningTable.values()):
+		try:
+			appName = mod.appName
+		except Exception:
+			continue
+		if appName and appName != "nvda":
+			apps.add(appName)
+	return sorted(apps)
+
+
 def getAllAvailableAppModules() -> List[str]:
 	# The full list of modules a user can map an app to is the union of every module physically
 	# present in the appModules package and the targets of the currently configured aliases,
@@ -146,7 +163,19 @@ def migrateLegacyMappingsFile():
 		log.error(f"Could not migrate custom mappings file: {e}")
 
 
+def dedupeMappings(mappings: List[Mapping]) -> List[Mapping]:
+	# Guarantee at most one mapping per application. Executables are matched by their lowercased name,
+	# so applications are compared case-insensitively; later entries win, keeping the most recent choice.
+	# This protects the persisted file from ever holding duplicates, even if a caller passes some in.
+	byApp = {}
+	for mapping in mappings:
+		byApp[mapping.app.lower()] = mapping
+	return list(byApp.values())
+
+
 def persist():
+	global customModulesMapping
+	customModulesMapping = dedupeMappings(customModulesMapping)
 	with open(getCustomMappingsFilePath(), "wb") as f:
 		pickle.dump(customModulesMapping, f)
 	log.info("Custom mappings saved to file")
@@ -157,7 +186,7 @@ def loadCustomMappings():
 	migrateLegacyMappingsFile()
 	try:
 		with open(getCustomMappingsFilePath(), "rb") as f:
-			customModulesMapping = pickle.load(f)
+			customModulesMapping = dedupeMappings(pickle.load(f))
 		log.info("Custom mappings loaded from file")
 		mustRestart = False
 		for mapping in customModulesMapping:

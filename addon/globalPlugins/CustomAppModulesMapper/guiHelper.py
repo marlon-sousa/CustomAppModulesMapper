@@ -52,15 +52,21 @@ class CustomAppModuleMapperSettingPanel(gui.settingsDialogs.SettingsPanel):
         self.mappingsList.InsertColumn(0, _("App Name"))
         self.mappingsList.InsertColumn(1, _("Module Name"))
         actionsHelper = guiHelper.BoxSizerHelper(self, orientation=wx.HORIZONTAL)
-        # Translators: button that opens the dialog to add a new custom mapping.
-        self.addButton = actionsHelper.addItem(wx.Button(self, label=_("&Add mapping")))
-        # Translators: button that detaches the application currently in the foreground from any app
-        # module, so NVDA applies no application specific behaviour to it.
+        # Translators: button that opens the dialog to associate an application with an app module
+        # (mapping it to a module, or detaching it by choosing "not associated").
+        self.addButton = actionsHelper.addItem(wx.Button(self, label=_("&Associate app...")))
+        # Translators: button that detaches the application the user was last in from any app module,
+        # so NVDA applies no application specific behaviour to it.
         self.unassociateButton = actionsHelper.addItem(wx.Button(self, label=_("&Unassociate current app")))
         # Translators: button that removes the selected custom mapping and restores the original module.
         self.removeButton = actionsHelper.addItem(wx.Button(self, label=_("&Remove mapping")))
         sHelper.addItem(actionsHelper)
         settingsSizer.Fit(self)
+        # Detaching acts on the last focused application. If none has been seen yet (e.g. NVDA was just
+        # restarted and no application has been focused since), there is nothing to unassociate, so the
+        # button is disabled. This state is stable while the panel is open because focus stays within
+        # NVDA, whose events are ignored by the tracker.
+        self.unassociateButton.Enable(mapperHandler.getLastForegroundApp() is not None)
         self.bindEvents()
         self.buildMappingsList()
 
@@ -71,10 +77,12 @@ class CustomAppModuleMapperSettingPanel(gui.settingsDialogs.SettingsPanel):
 
     def buildMappingsList(self):
         customModulesMapping = mapperHandler.getCustomModulesMapping()
+        # Key the model by the lowercased executable name so lookups and duplicate detection are
+        # case-insensitive, matching how NVDA matches executables (it lowercases their names).
         self.mappings = reduce(
             lambda acc, item: acc.update({
-                item.app: CustomMappingItem(
-                    item.app,
+                item.app.lower(): CustomMappingItem(
+                    item.app.lower(),
                     item.appModule,
                     item.appOriginalModule,
                     CustomMappingAction.IGNORE
@@ -110,7 +118,8 @@ class CustomAppModuleMapperSettingPanel(gui.settingsDialogs.SettingsPanel):
         self.refreshList()
 
     def onAdd(self, evt):
-        title = _("add mapping")
+        # Translators: title of the dialog used to associate an application with an app module.
+        title = _("Associate application")
         gui.mainFrame.prePopup()
         # Pass the mappings currently staged in this panel so the dialog can tell whether the app
         # the user types is already mapped (MODIFY) or new (ADD), and preserve its original module.
@@ -126,6 +135,7 @@ class CustomAppModuleMapperSettingPanel(gui.settingsDialogs.SettingsPanel):
         # Stage (but do not yet apply) a mapping of app -> moduleName, reusing the existing entry when
         # the app is already staged so its original module and ADD/MODIFY state are preserved. Detaching
         # an app is simply mapping it to the notAssociated sentinel, so this covers both add and detach.
+        app = app.lower()
         if app in self.mappings:
             item = self.mappings[app]
             item.appModule = moduleName
@@ -147,25 +157,28 @@ class CustomAppModuleMapperSettingPanel(gui.settingsDialogs.SettingsPanel):
                 return
 
     def onUnassociate(self, evt):
+        # The button is disabled when there is no last focused application, so current is normally set;
+        # the guard is kept purely defensively.
         current = mapperHandler.getLastForegroundApp()
         if not current:
-            wx.MessageBox(
-                # Translators: shown when the user asks to unassociate the current app but no real
-                # application was in the foreground before NVDA's settings were opened.
-                _("There is no application to unassociate. Focus the application you want to detach, then reopen this dialog."), # noqa E501
-                # Translators: title of the message shown when there is no application to unassociate.
-                _("Unassociate current app"),
-                wx.OK | wx.ICON_INFORMATION,
-            )
             return
         app, _currentModule = current
-        self.stageMapping(app, mapperHandler.NOT_ASSOCIATED_MODULE)
+        confirmed = wx.MessageBox(
+            # Translators: confirmation shown before detaching the current application from its app
+            # module. {app} is the application executable name.
+            _("Unassociate {app} from any app module?").format(app=app),
+            # Translators: title of the confirmation shown before unassociating the current application.
+            _("Unassociate current app"),
+            wx.YES_NO | wx.ICON_QUESTION,
+        )
+        if confirmed == wx.YES:
+            self.stageMapping(app, mapperHandler.NOT_ASSOCIATED_MODULE)
 
     def onRemove(self, evt):
         selected = self.mappingsList.GetFirstSelected()
         if selected == -1:
             return
-        app = self.mappingsList.GetItemText(selected)
+        app = self.mappingsList.GetItemText(selected).lower()
         self.mappings[app].action = CustomMappingAction.REMOVE
         self.refreshList()
 
@@ -206,54 +219,124 @@ class ModuleMappingDialog(
     def __init__(self, parent, title, currentMappings, prefill=None):
         super(ModuleMappingDialog, self).__init__(parent, title=title)
         self.result = None
-        # currentMappings maps an app name to the CustomMappingItem currently staged for it.
+        # currentMappings maps a lowercased app name to the CustomMappingItem currently staged for it.
         self.currentMappings = currentMappings
         # prefill is an optional (executableName, currentModuleName) tuple describing the last real
         # foreground application, used to pre-populate the fields.
         self.prefill = prefill
         self.availableModules = mapperHandler.getAllAvailableAppModules()
+        # Modules offered to the user: the friendly "not associated" label first (so detaching an app is
+        # just another choice in this list, and is easy to reach), then the real modules alphabetically.
+        self.moduleChoices = [NOT_ASSOCIATED_LABEL] + self.availableModules
         mainSizer = wx.BoxSizer(wx.VERTICAL)
         sHelper = guiHelper.BoxSizerHelper(self, orientation=wx.VERTICAL)
 
-        # Translators: label test for app field in add mapping dialog
+        # Translators: label for the application field in the associate application dialog.
         appLabelText = _("&App")
-        self.AppTextCtrl = sHelper.addLabeledControl(appLabelText, wx.TextCtrl)
+        # Editable combo: pre-populated with the applications currently open so the user can pick one
+        # without typing, while still being free to type an executable name that is not running.
+        appChoices = self.buildAppChoices()
+        self.appComboBox = sHelper.addLabeledControl(appLabelText, wx.ComboBox, choices=appChoices)
 
-        # Translators: label test for app module field in add mapping dialog
+        # Translators: label for the app module field in the associate application dialog.
         appModuleLabelText = _("App &module")
         appLabel = wx.StaticText(self, label=appModuleLabelText)
-        self.appModulesComboBox = wx.ComboBox(self, choices=self.availableModules, style=wx.CB_READONLY)
+        self.appModulesComboBox = wx.ComboBox(self, choices=self.moduleChoices, style=wx.CB_READONLY)
         sHelper.addItem(appLabel)
         sHelper.addItem(self.appModulesComboBox)
 
         sHelper.addDialogDismissButtons(wx.OK | wx.CANCEL, separated=True)
+        # CreateButtonSizer parents the OK button to the dialog, so it can be found and toggled directly.
+        self.okButton = self.FindWindow(wx.ID_OK)
 
         mainSizer.Add(sHelper.sizer, border=guiHelper.BORDER_FOR_DIALOGS, flag=wx.ALL)
         mainSizer.Fit(self)
         self.SetSizer(mainSizer)
         self.applyPrefill()
-        self.AppTextCtrl.SetFocus()
-        self.AppTextCtrl.SelectAll()
-        self.Bind(wx.EVT_BUTTON, self.onOk, id=wx.ID_OK)
+        self.bindDialogEvents()
+        self.updateOkState()
+        self.appComboBox.SetFocus()
+
+    def buildAppChoices(self):
+        apps = list(mapperHandler.getRunningApps())
+        # Make sure the pre-filled application is offered even if NVDA is not currently tracking it.
+        if self.prefill and self.prefill[0] and self.prefill[0] not in apps:
+            apps.append(self.prefill[0])
+        return sorted(apps)
+
+    def moduleToDisplay(self, moduleName):
+        # Map an internal module name to what is shown in the combo (the detach sentinel is friendlier).
+        if moduleName == mapperHandler.NOT_ASSOCIATED_MODULE:
+            return NOT_ASSOCIATED_LABEL
+        return moduleName
+
+    def displayToModule(self, display):
+        # Inverse of moduleToDisplay: turn the selected combo entry back into an internal module name.
+        if display == NOT_ASSOCIATED_LABEL:
+            return mapperHandler.NOT_ASSOCIATED_MODULE
+        return display
 
     def applyPrefill(self):
-        # Pre-populate the app field with the last real foreground application and, when that app
-        # currently resolves to a module offered in the list, preselect it. The detach sentinel is not
-        # in the list, so a currently detached app simply leaves the module unselected.
+        # Pre-populate the app field with the last real foreground application and preselect the module
+        # it currently uses (including "not associated" if it is already detached).
         if not self.prefill:
             return
         appName, currentModule = self.prefill
-        self.AppTextCtrl.SetValue(appName)
-        if currentModule in self.availableModules:
-            self.appModulesComboBox.SetValue(currentModule)
+        self.appComboBox.SetValue(appName)
+        display = self.moduleToDisplay(currentModule)
+        if display in self.moduleChoices:
+            self.appModulesComboBox.SetValue(display)
+
+    def bindDialogEvents(self):
+        # Re-evaluate whether OK should be enabled whenever either field changes.
+        self.appComboBox.Bind(wx.EVT_TEXT, self.onFieldChanged)
+        self.appComboBox.Bind(wx.EVT_COMBOBOX, self.onFieldChanged)
+        self.appModulesComboBox.Bind(wx.EVT_COMBOBOX, self.onFieldChanged)
+        self.Bind(wx.EVT_BUTTON, self.onOk, id=wx.ID_OK)
+
+    def getEnteredApp(self):
+        # NVDA matches executables by their lowercased name, so normalise typed input the same way.
+        return self.appComboBox.GetValue().strip().lower()
+
+    def getSelectedModule(self):
+        display = self.appModulesComboBox.GetValue()
+        if not display:
+            return None
+        return self.displayToModule(display)
+
+    def currentModuleFor(self, app):
+        # The module the app is already associated with, if known: either a mapping already staged in the
+        # panel, or (for the pre-filled current app) the module it is running under. Used to reject a
+        # selection that would only re-create the association the app already has.
+        item = self.currentMappings.get(app)
+        if item is not None and item.action != CustomMappingAction.REMOVE:
+            return item.appModule
+        if self.prefill and app == self.prefill[0]:
+            return self.prefill[1]
+        return None
+
+    def isDuplicate(self, app, module):
+        return module is not None and module == self.currentModuleFor(app)
+
+    def updateOkState(self):
+        if self.okButton is None:
+            return
+        app = self.getEnteredApp()
+        module = self.getSelectedModule()
+        # OK is available only when an app is given, a module is chosen, and the pair is not a duplicate
+        # of what the app already uses (which would be a no-op and could add a duplicate entry).
+        self.okButton.Enable(bool(app) and module is not None and not self.isDuplicate(app, module))
+
+    def onFieldChanged(self, evt):
+        self.updateOkState()
+        evt.Skip()
 
     def onOk(self, evt):
-        app = self.AppTextCtrl.GetValue()
-        appModule = self.appModulesComboBox.GetValue()
-        if not app or not appModule:
-            wx.MessageBox(_("Please fill all fields"), _("Error"), wx.OK | wx.ICON_ERROR)
+        app = self.getEnteredApp()
+        module = self.getSelectedModule()
+        # OK is disabled in these cases; the guard is purely defensive.
+        if not app or module is None or self.isDuplicate(app, module):
             return
-        originalMapping = mapperHandler.getAllConfiguredMappings()
         if app in self.currentMappings:
             # The app is already mapped: keep the module NVDA had before any custom mapping so that
             # removing the mapping later restores the correct original.
@@ -261,6 +344,6 @@ class ModuleMappingDialog(
             originalModule = self.currentMappings[app].appOriginalModule
         else:
             action = CustomMappingAction.ADD
-            originalModule = originalMapping.get(app, None)
-        self.result = CustomMappingItem(app, appModule, originalModule, action)
+            originalModule = mapperHandler.getAllConfiguredMappings().get(app, None)
+        self.result = CustomMappingItem(app, module, originalModule, action)
         evt.Skip()
