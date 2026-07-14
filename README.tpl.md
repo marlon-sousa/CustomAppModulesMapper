@@ -33,9 +33,9 @@ Custom mappings are managed in NVDA's Settings dialog, in the **Custom Applicati
   - The **application** field is a combo box pre-filled with the applications you currently have open, with the app you were in right before opening NVDA's Settings selected. You can pick another open app or type any executable name by hand.
   - The **module** list offers `(not associated)` first, then every available module. Choosing a real module associates the app with it; choosing `(not associated)` associates the app with no module, so NVDA applies no app specific behavior to it. This single dialog is how you associate any application, running or not, with a module or with nothing.
   - The confirm button stays disabled until you have both chosen an application and a module, and it will not let you re-select the association the app already has.
-- **Remove mapping**: removes the selected custom mapping (disassociates the application), restoring the module the application originally used.
+- **Disassociate**: removes the selected custom mapping, restoring the module the application originally used.
 
-When you open the category, if the application you were last in already has a custom mapping, its row is selected automatically, ready to remove or re-associate.
+When you open the category, if the application you were last in already has a custom mapping, its row is selected automatically, ready to disassociate or re-associate.
 
 Changes take effect when you confirm the Settings dialog. Application names are matched case-insensitively, the same way NVDA matches executables.
 
@@ -45,5 +45,5 @@ Changes take effect when you confirm the Settings dialog. Application names are 
 2. Associate any application with no module (`(not associated)`), so it behaves as if no app module were present.
 3. The applications you have open are offered for selection, with the app you were last in pre-selected, so you rarely need to type executable names by hand.
 4. Custom mappings are persisted, so they are kept between NVDA runs, and are protected against duplicates.
-5. At any time, remove a custom mapping and the original mapping is restored.
+5. At any time, disassociate an application and its original mapping is restored.
 6. Everything is managed through the NVDA Settings dialog, in the Custom Application Module Mapper category.

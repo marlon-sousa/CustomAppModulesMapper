@@ -55,8 +55,9 @@ class CustomAppModuleMapperSettingPanel(gui.settingsDialogs.SettingsPanel):
         # Translators: button that opens the dialog to associate an application with an app module
         # (mapping it to a module, or detaching it by choosing "not associated").
         self.addButton = actionsHelper.addItem(wx.Button(self, label=_("&Associate app...")))
-        # Translators: button that removes the selected custom mapping and restores the original module.
-        self.removeButton = actionsHelper.addItem(wx.Button(self, label=_("&Remove mapping")))
+        # Translators: button that disassociates the selected application, removing its custom mapping
+        # and restoring the module it originally used.
+        self.removeButton = actionsHelper.addItem(wx.Button(self, label=_("&Disassociate")))
         sHelper.addItem(actionsHelper)
         settingsSizer.Fit(self)
         self.bindEvents()
