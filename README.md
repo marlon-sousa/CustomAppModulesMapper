@@ -1,9 +1,9 @@
-# CustomAppModulesMapper 0.2.0
+# CustomAppModulesMapper 0.3.0
 
 Nvda ADDON for allowing dynamic mapping of existing app modules for other applications.
 
 ## download
-Download the [CustomAppModulesMapper 0.2.0 addon](https://github.com/marlon-sousa/CustomAppModulesMapper/releases/download/0.2.0/CustomAppModulesMapper-0.2.0.nvda-addon)
+Download the [CustomAppModulesMapper 0.3.0 addon](https://github.com/marlon-sousa/CustomAppModulesMapper/releases/download/0.3.0/CustomAppModulesMapper-0.3.0.nvda-addon)
 
 ## How it works
 

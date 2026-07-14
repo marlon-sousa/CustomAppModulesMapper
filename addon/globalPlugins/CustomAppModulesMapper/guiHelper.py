@@ -96,8 +96,9 @@ class CustomAppModuleMapperSettingPanel(gui.settingsDialogs.SettingsPanel):
     def onAdd(self, evt):
         title = _("add mapping")
         gui.mainFrame.prePopup()
-        availableModules = mapperHandler.getAllAvailableAppModules()
-        dialog = ModuleMappingDialog(self, title, availableModules)
+        # Pass the mappings currently staged in this panel so the dialog can tell whether the app
+        # the user types is already mapped (MODIFY) or new (ADD), and preserve its original module.
+        dialog = ModuleMappingDialog(self, title, self.mappings)
         if dialog.ShowModal() == wx.ID_OK:
             self.onAddDialogResumed(dialog.result)
         dialog.Destroy()
@@ -145,10 +146,11 @@ class ModuleMappingDialog(
     wx.Dialog,  # wxPython does not seem to call base class initializer, put last in MRO
 ):
 
-    def __init__(self, parent, title, customModulesMapping):
+    def __init__(self, parent, title, currentMappings):
         super(ModuleMappingDialog, self).__init__(parent, title=title)
         self.result = None
-        self.customModulesMapping = customModulesMapping
+        # currentMappings maps an app name to the CustomMappingItem currently staged for it.
+        self.currentMappings = currentMappings
         self.availableModules = mapperHandler.getAllAvailableAppModules()
         mainSizer = wx.BoxSizer(wx.VERTICAL)
         sHelper = guiHelper.BoxSizerHelper(self, orientation=wx.VERTICAL)
@@ -179,10 +181,13 @@ class ModuleMappingDialog(
             wx.MessageBox(_("Please fill all fields"), _("Error"), wx.OK | wx.ICON_ERROR)
             return
         originalMapping = mapperHandler.getAllConfiguredMappings()
-        action = CustomMappingAction.ADD if app not in self.customModulesMapping else CustomMappingAction.MODIFY # noqa E501
-        if app in self.customModulesMapping:
-            originalModule = self.customModulesMapping[app].appModule
+        if app in self.currentMappings:
+            # The app is already mapped: keep the module NVDA had before any custom mapping so that
+            # removing the mapping later restores the correct original.
+            action = CustomMappingAction.MODIFY
+            originalModule = self.currentMappings[app].appOriginalModule
         else:
+            action = CustomMappingAction.ADD
             originalModule = originalMapping.get(app, None)
         self.result = CustomMappingItem(app, appModule, originalModule, action)
         evt.Skip()
