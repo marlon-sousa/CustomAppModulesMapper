@@ -268,18 +268,34 @@ class ModuleMappingDialog(
         # it currently uses (including "not associated" if it is already detached).
         if not self.prefill:
             return
-        appName, currentModule = self.prefill
-        self.appComboBox.SetValue(appName)
-        display = self.moduleToDisplay(currentModule)
-        if display in self.moduleChoices:
-            self.appModulesComboBox.SetValue(display)
+        self.appComboBox.SetValue(self.prefill[0])
+        self.preselectModuleForApp()
+
+    def preselectModuleForApp(self):
+        # Show the module the entered application is currently associated with, so a re-association
+        # starts from its current state (and the duplicate guard is visible). Clear the module when the
+        # application is unknown. Called whenever the app field changes, so switching apps mid-dialog
+        # keeps the module in sync with the chosen app rather than the one originally pre-filled.
+        currentModule = self.currentModuleFor(self.getEnteredApp())
+        if currentModule is not None:
+            display = self.moduleToDisplay(currentModule)
+            if display in self.moduleChoices:
+                self.appModulesComboBox.SetValue(display)
+                return
+        self.appModulesComboBox.SetSelection(wx.NOT_FOUND)
 
     def bindDialogEvents(self):
-        # Re-evaluate whether OK should be enabled whenever either field changes.
-        self.appComboBox.Bind(wx.EVT_TEXT, self.onFieldChanged)
-        self.appComboBox.Bind(wx.EVT_COMBOBOX, self.onFieldChanged)
+        # When the app changes, re-sync the module preselection to the chosen app; on any field change,
+        # re-evaluate whether OK should be enabled.
+        self.appComboBox.Bind(wx.EVT_TEXT, self.onAppChanged)
+        self.appComboBox.Bind(wx.EVT_COMBOBOX, self.onAppChanged)
         self.appModulesComboBox.Bind(wx.EVT_COMBOBOX, self.onFieldChanged)
         self.Bind(wx.EVT_BUTTON, self.onOk, id=wx.ID_OK)
+
+    def onAppChanged(self, evt):
+        self.preselectModuleForApp()
+        self.updateOkState()
+        evt.Skip()
 
     def getEnteredApp(self):
         # NVDA matches executables by their lowercased name, so normalise typed input the same way.

@@ -1,49 +1,63 @@
 # CustomAppModulesMapper 0.3.0
 
-NVDA add-on for dynamically mapping applications to existing app modules, and for detaching applications from their app module, without writing code.
+NVDA add-on for dynamically associating applications with existing app modules — and for associating them with no module — without writing code.
 
 ## download
 Download the [CustomAppModulesMapper 0.3.0 addon](https://github.com/marlon-sousa/CustomAppModulesMapper/releases/download/0.3.0/CustomAppModulesMapper-0.3.0.nvda-addon)
 
-## How it works
+## What is an app module association?
 
-Sometimes it is necessary to map a known application to a known NVDA app module.
+To give an application accessible, app specific behavior, NVDA loads an **app module** for it — a small component that improves how that application is read and interacted with. NVDA decides which app module to load for a running application from its **executable name**:
 
-The module might ship with NVDA out of the box or be provided by a third party add-on.
+- Most app modules are matched by having the **same name** as the executable (for example `notepad.exe` uses the `notepad` app module).
+- Some applications are matched through a built-in **alias** (for example DBeaver, whose executable is `dbeaver.exe`, is associated with the `eclipse` app module, because DBeaver is based on Eclipse).
+- App modules can also be provided by **other add-ons**.
+- When nothing matches, NVDA uses a generic, empty app module, so the application gets **no** app specific behavior.
 
-A good example is DBeaver, which is based on Eclipse but has a different executable name. NVDA provides this mapping out of the box, so that DBeaver reuses the same functionality as Eclipse.
+This link between an application and the app module NVDA loads for it is its **association**. This add-on lets you control that association: associate an application with any available app module, associate it with **no** module, change an existing association, or remove your change and restore what NVDA used originally.
 
-But such a mapping might not exist yet, or might be waiting for a merge that could take months to happen.
+## Why would you use this add-on?
 
-Traditionally, the only ways to provide a new mapping are to build a dedicated add-on that exports it, or to merge the mapping into NVDA's appModules package.
+Sometimes the association you want does not exist out of the box:
 
-Conversely, an application may already be picked up by an app module you would rather it did not use, and there is no built-in way to detach it.
+- A new application behaves like one NVDA already supports (for example an Eclipse or Electron/VS Code based tool with a different executable name), and you want it to reuse that app module.
+- You want to try how a particular app module deals with an application, and switch between modules to compare.
+- An application is associated with an app module that gets in your way, and you want to detach it (associate it with no module) so NVDA applies no app specific behavior.
 
-This add-on lets you do both dynamically, straight from the NVDA Settings dialog, so that:
-
-1. If you need to map an app to a module, you can do it immediately, without coding an add-on or waiting for a merge into NVDA's source code.
-2. You can have several modules providing functionality to an app and alternate between them, to test how a given module deals with the app.
-3. If an app is associated with a module you do not want, you can detach it so that NVDA applies no app specific behavior to it.
+Traditionally the only ways to change this are to build a dedicated add-on that exports the association, or to get it merged into NVDA's source — which can take months. This add-on lets you do it immediately, from the NVDA Settings dialog. Your associations are persisted between NVDA runs and are fully reversible.
 
 ## Usage
 
-Custom mappings are managed in NVDA's Settings dialog, in the **Custom Application Module Mapper** category. It lists your current custom mappings, each showing the application executable name and the module it is associated with (applications associated with no module are shown as `(not associated)`), with the following actions:
+Associations are managed in NVDA's Settings dialog, in the **Custom Application Module Mapper** category. It lists your current custom associations, each showing the application executable name and the module it is associated with (applications associated with no module are shown as `(not associated)`).
 
-- **Associate app**: opens a dialog where you choose an application and the module to associate it with.
-  - The **application** field is a combo box pre-filled with the applications you currently have open, with the app you were in right before opening NVDA's Settings selected. You can pick another open app or type any executable name by hand.
-  - The **module** list offers `(not associated)` first, then every available module. Choosing a real module associates the app with it; choosing `(not associated)` associates the app with no module, so NVDA applies no app specific behavior to it. This single dialog is how you associate any application, running or not, with a module or with nothing.
-  - The confirm button stays disabled until you have both chosen an application and a module, and it will not let you re-select the association the app already has.
-- **Disassociate**: removes the selected custom mapping, restoring the module the application originally used.
+When you open the category, if the application you were in right before opening NVDA's Settings already has a custom association, its row is selected automatically, ready to disassociate or re-associate.
 
-When you open the category, if the application you were last in already has a custom mapping, its row is selected automatically, ready to disassociate or re-associate.
+Two actions are available:
 
-Changes take effect when you confirm the Settings dialog. Application names are matched case-insensitively, the same way NVDA matches executables.
+### Associate app
 
-### Features
+Opens a dialog where you choose an application and the module to associate it with.
 
-1. Associate any executable with any available app module, whether it is a native NVDA module or one exposed by another add-on.
+- The **application** field is a combo box pre-filled with the applications you currently have open, with the app you were in right before opening NVDA's Settings selected. You can pick another open application or type any executable name by hand (so you can prepare an association for an application that is not currently running).
+- The **module** list offers `(not associated)` first, then every available app module — both those bundled with NVDA and those provided by other add-ons. Choosing a real module associates the application with it; choosing `(not associated)` associates it with no module, so NVDA applies no app specific behavior to it.
+- When you choose an application that already has a custom association, its current module is pre-selected, and choosing a **different** module **changes** the association (re-associates the application). The module pre-selection follows the application you choose.
+- The confirm button stays disabled until you have chosen both an application and a module, and it will not let you re-select the association the application already has (which would do nothing).
+
+### Disassociate
+
+Removes the selected custom association, restoring the module the application originally used — that is, the module NVDA loaded before you made any change. This original is preserved even if you re-associated the application several times, so disassociating always returns it to its true original. The button is enabled only when a custom association is selected in the list.
+
+### Applying changes
+
+Changes take effect when you confirm the Settings dialog; the running app modules are reloaded so the new associations apply immediately. Application names are matched case-insensitively, the same way NVDA matches executables.
+
+## Features
+
+1. Associate any application with any available app module, whether it is bundled with NVDA or provided by another add-on.
 2. Associate any application with no module (`(not associated)`), so it behaves as if no app module were present.
-3. The applications you have open are offered for selection, with the app you were last in pre-selected, so you rarely need to type executable names by hand.
-4. Custom mappings are persisted, so they are kept between NVDA runs, and are protected against duplicates.
-5. At any time, disassociate an application and its original mapping is restored.
-6. Everything is managed through the NVDA Settings dialog, in the Custom Application Module Mapper category.
+3. Change (re-associate) an existing association to a different module; the module restored on disassociation is always the true original, no matter how many times you re-associate.
+4. The applications you have open are offered for selection, with the app you were last in pre-selected, so you rarely need to type executable names by hand; you can still type any executable, including one that is not running.
+5. Disassociate an application at any time and its original module is restored.
+6. Application names are handled case-insensitively, matching how NVDA matches executables.
+7. Associations are persisted between NVDA runs, stored in the NVDA configuration directory so they survive updating or reinstalling the add-on, and protected against duplicates.
+8. Everything is managed through the NVDA Settings dialog, in the Custom Application Module Mapper category.
