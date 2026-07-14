@@ -26,6 +26,11 @@ from typing import List, Optional, Tuple
 # the GUI and instead reached through the dedicated "unassociate" action.
 NOT_ASSOCIATED_MODULE = "notAssociated"
 
+# On-disk format version of the mappings pickle. Bump this whenever the stored structure changes, so
+# older files can be recognised and migrated. Version 0 is the original bare list of Mapping objects
+# written before 1.0; version 1 wraps that list in a dict carrying this version number.
+PICKLE_FORMAT_VERSION = 1
+
 
 @dataclass
 class Mapping:
@@ -206,16 +211,26 @@ def persist():
 	global customModulesMapping
 	customModulesMapping = dedupeMappings(customModulesMapping)
 	with open(getCustomMappingsFilePath(), "wb") as f:
-		pickle.dump(customModulesMapping, f)
+		pickle.dump({"formatVersion": PICKLE_FORMAT_VERSION, "mappings": customModulesMapping}, f)
 	log.info("Custom mappings saved to file")
+
+
+def readMappingsFile(path) -> List[Mapping]:
+	# Returns the list of Mapping objects stored at path, understanding both the current versioned
+	# format (a dict with "formatVersion" and "mappings") and the original bare list of Mapping objects
+	# written before 1.0 (treated as format version 0). Future format changes branch on the version here.
+	with open(path, "rb") as f:
+		data = pickle.load(f)
+	if isinstance(data, dict):
+		return data.get("mappings", [])
+	return data
 
 
 def loadCustomMappings():
 	global customModulesMapping
 	migrateLegacyMappingsFile()
 	try:
-		with open(getCustomMappingsFilePath(), "rb") as f:
-			customModulesMapping = dedupeMappings(pickle.load(f))
+		customModulesMapping = dedupeMappings(readMappingsFile(getCustomMappingsFilePath()))
 		log.info("Custom mappings loaded from file")
 		mustRestart = False
 		for mapping in customModulesMapping:

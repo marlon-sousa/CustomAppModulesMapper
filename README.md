@@ -1,9 +1,9 @@
-# CustomAppModulesMapper 0.3.0
+# CustomAppModulesMapper 1.0.0
 
 NVDA add-on for dynamically associating applications with existing app modules — and for associating them with no module — without writing code.
 
 ## download
-Download the [CustomAppModulesMapper 0.3.0 addon](https://github.com/marlon-sousa/CustomAppModulesMapper/releases/download/0.3.0/CustomAppModulesMapper-0.3.0.nvda-addon)
+Download the [CustomAppModulesMapper 1.0.0 addon](https://github.com/marlon-sousa/CustomAppModulesMapper/releases/download/1.0.0/CustomAppModulesMapper-1.0.0.nvda-addon)
 
 ## What is an app module association?
 
