@@ -63,10 +63,22 @@ class CustomAppModuleMapperSettingPanel(gui.settingsDialogs.SettingsPanel):
         self.bindEvents()
         self.buildMappingsList()
         self.selectCurrentApp()
+        self.updateDisassociateButton()
 
     def bindEvents(self):
         self.addButton.Bind(wx.EVT_BUTTON, self.onAdd)
         self.removeButton.Bind(wx.EVT_BUTTON, self.onRemove)
+        # Disassociate acts on the selected mapping, so keep its enabled state in sync with the selection.
+        self.mappingsList.Bind(wx.EVT_LIST_ITEM_SELECTED, self.onListSelectionChanged)
+        self.mappingsList.Bind(wx.EVT_LIST_ITEM_DESELECTED, self.onListSelectionChanged)
+
+    def updateDisassociateButton(self):
+        # There is nothing to disassociate unless a mapping is selected.
+        self.removeButton.Enable(self.mappingsList.GetFirstSelected() != -1)
+
+    def onListSelectionChanged(self, evt):
+        self.updateDisassociateButton()
+        evt.Skip()
 
     def selectCurrentApp(self):
         # Convenience: when the application the user was last in already has a custom mapping, select it
@@ -105,6 +117,7 @@ class CustomAppModuleMapperSettingPanel(gui.settingsDialogs.SettingsPanel):
         for key in sorted_keys:
             mapping = self.mappings[key]
             self.mappingsList.Append((mapping.app, self.moduleDisplayName(mapping.appModule)))
+        self.updateDisassociateButton()
 
     def moduleDisplayName(self, moduleName: str) -> str:
         # Detached applications are stored as a mapping to the notAssociated sentinel module, but that
