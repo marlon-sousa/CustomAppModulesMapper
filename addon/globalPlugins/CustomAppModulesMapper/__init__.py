@@ -9,6 +9,7 @@ import globalPluginHandler
 import globalVars
 import gui
 import gui.settingsDialogs
+from . import mapperHandler
 from .mapperHandler import loadCustomMappings
 from .guiHelper import CustomAppModuleMapperSettingPanel
 from logHandler import log
@@ -28,6 +29,19 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 		if not globalVars.appArgs.secure:
 			loadCustomMappings()
 			gui.settingsDialogs.NVDASettingsDialog.categoryClasses.append(CustomAppModuleMapperSettingPanel)
+
+	def event_foreground(self, obj, nextHandler):
+		# Remember the last real application that had the foreground so the settings panel can offer to
+		# act on it. NVDA raises this event for its own windows too (menus, dialogs, the Settings window
+		# this add-on's panel lives in); skipping "nvda" keeps the stored value pointing at the actual
+		# application the user was in before opening NVDA's own UI.
+		try:
+			appModule = obj.appModule
+			if appModule is not None and appModule.appName and appModule.appName != "nvda":
+				mapperHandler.setLastForegroundApp(appModule.appName, appModule.appModuleName)
+		except Exception:
+			log.debugWarning("Could not record foreground application", exc_info=True)
+		nextHandler()
 
 	def terminate(self):
 		super(GlobalPlugin, self).terminate()

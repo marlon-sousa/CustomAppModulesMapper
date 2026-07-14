@@ -14,7 +14,14 @@ import globalVars
 import pkgutil
 from logHandler import log
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional, Tuple
+
+
+# Name of the deliberately empty app module shipped with this add-on (see appModules/notAssociated.py).
+# Mapping an application to this module detaches it from whatever module NVDA would otherwise load.
+# It is a sentinel rather than a real mapping target, so it is hidden from the module list offered in
+# the GUI and instead reached through the dedicated "unassociate" action.
+NOT_ASSOCIATED_MODULE = "notAssociated"
 
 
 @dataclass
@@ -25,6 +32,22 @@ class Mapping:
 
 
 customModulesMapping: List[Mapping]
+
+# Executable name and current module of the last real (non NVDA) application that had the foreground.
+# The settings panel lives inside NVDA's own Settings window, so by the time it is built the focused
+# application is NVDA itself. The global plugin keeps this up to date via event_foreground so the panel
+# can still offer to act on the application the user was in right before opening Settings.
+_lastForegroundApp: Optional[Tuple[str, str]] = None
+
+
+def setLastForegroundApp(appName: str, moduleName: str):
+	global _lastForegroundApp
+	_lastForegroundApp = (appName, moduleName)
+
+
+def getLastForegroundApp() -> Optional[Tuple[str, str]]:
+	# Returns a (executableName, currentModuleName) tuple, or None if no real application has been seen.
+	return _lastForegroundApp
 
 
 def getCustomModulesMapping():
@@ -40,13 +63,16 @@ def filterUnmappedModules(modName):
 	# These are generic host/internal modules that are not meaningful mapping targets:
 	# nvda is NVDA itself, and the others are shared hosts (Java, the Edge WebView, the modern
 	# touch keyboard, etc.) that back many unrelated apps, so offering them as targets would be
-	# misleading. They are hidden from the list of available modules.
+	# misleading. notAssociated is this add-on's detach sentinel, reached through the dedicated
+	# "unassociate" action instead of by picking it as a module. They are all hidden from the list
+	# of available modules.
 	return modName not in (
 		'javaw',
 		'messengerWindow',
 		'msgComposeWindow',
 		'msedgewebview2',
 		'nvda',
+		NOT_ASSOCIATED_MODULE,
 		'windowsinternal_composableshell_experiences_textinput_inputapp',
 	)
 
