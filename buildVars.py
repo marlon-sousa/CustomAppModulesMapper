@@ -12,13 +12,14 @@ addon_info = AddonInfo(
     # Translators: Long description for this add-on in add-on store.
     addon_description=_("""Lets you dynamically map any application to any existing NVDA app module, straight from the NVDA settings dialog, without writing an add-on or waiting for a mapping to be merged into NVDA."""),
     # Translators: what's new text for this add-on version shown in add-on store.
-    addon_changelog=_("""Version 0.3.0:
-* Compatible with NVDA 2026.1.
-* The list of app modules you can map an application to now includes every module bundled with NVDA and every module provided by other add-ons, instead of only the handful that already had an alias.
-* Custom mappings are now stored in the NVDA configuration directory, so they survive updating or reinstalling the add-on. Mappings saved by previous versions are migrated automatically.
-* Fixed editing an existing mapping so that removing it afterwards restores the correct original module.
-* Modernized the add-on build system and project tooling."""),
-    addon_version="0.3.0",
+    addon_changelog=_("""Version 1.0.0:
+* Associate any application with any app module — one bundled with NVDA or provided by another add-on — or with no module ("not associated"), straight from the NVDA Settings dialog, without writing an add-on or waiting for a mapping to be merged into NVDA.
+* Change an association at any time, or remove it to restore the module the application originally used.
+* The applications you currently have open are offered for selection, with the app you were last in pre-selected; you can still type any executable name.
+* Application names are matched case-insensitively.
+* Associations are stored in the NVDA configuration directory, so they survive updating or reinstalling the add-on, and are protected against duplicates. Mappings saved by previous versions are migrated automatically.
+* Compatible with NVDA 2026.1."""),
+    addon_version="1.0.0",
     addon_author="Marlon Brandão de Sousa <marlon.bsousa@gmail.com>",
     addon_url="https://github.com/marlon-sousa/CustomAppModulesMapper",
     addon_sourceURL="https://github.com/marlon-sousa/CustomAppModulesMapper",

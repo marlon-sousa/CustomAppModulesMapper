@@ -7,14 +7,29 @@
 import os
 import pickle
 import shutil
+import ctypes
+from ctypes import wintypes
 import addonHandler
 import appModules
 import appModuleHandler
 import globalVars
 import pkgutil
+import winUser
 from logHandler import log
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional, Tuple
+
+
+# Name of the deliberately empty app module shipped with this add-on (see appModules/notAssociated.py).
+# Mapping an application to this module detaches it from whatever module NVDA would otherwise load.
+# It is a sentinel rather than a real mapping target, so it is hidden from the module list offered in
+# the GUI and instead reached through the dedicated "unassociate" action.
+NOT_ASSOCIATED_MODULE = "notAssociated"
+
+# On-disk format version of the mappings pickle. Bump this whenever the stored structure changes, so
+# older files can be recognised and migrated. Version 0 is the original bare list of Mapping objects
+# written before 1.0; version 1 wraps that list in a dict carrying this version number.
+PICKLE_FORMAT_VERSION = 1
 
 
 @dataclass
@@ -25,6 +40,23 @@ class Mapping:
 
 
 customModulesMapping: List[Mapping]
+
+# Executable name and current module of the last real (non NVDA) application that had the focus. The
+# settings panel lives inside NVDA's own Settings window, so by the time it is built the focused
+# application is NVDA itself. The global plugin keeps this up to date via event_gainFocus so the panel
+# can pre-fill the associate dialog with, and select the row for, the application the user was in right
+# before opening Settings.
+_lastForegroundApp: Optional[Tuple[str, str]] = None
+
+
+def setLastForegroundApp(appName: str, moduleName: str):
+	global _lastForegroundApp
+	_lastForegroundApp = (appName, moduleName)
+
+
+def getLastForegroundApp() -> Optional[Tuple[str, str]]:
+	# Returns a (executableName, currentModuleName) tuple, or None if no real application has been seen.
+	return _lastForegroundApp
 
 
 def getCustomModulesMapping():
@@ -40,13 +72,16 @@ def filterUnmappedModules(modName):
 	# These are generic host/internal modules that are not meaningful mapping targets:
 	# nvda is NVDA itself, and the others are shared hosts (Java, the Edge WebView, the modern
 	# touch keyboard, etc.) that back many unrelated apps, so offering them as targets would be
-	# misleading. They are hidden from the list of available modules.
+	# misleading. notAssociated is this add-on's detach sentinel, reached through the dedicated
+	# "unassociate" action instead of by picking it as a module. They are all hidden from the list
+	# of available modules.
 	return modName not in (
 		'javaw',
 		'messengerWindow',
 		'msgComposeWindow',
 		'msedgewebview2',
 		'nvda',
+		NOT_ASSOCIATED_MODULE,
 		'windowsinternal_composableshell_experiences_textinput_inputapp',
 	)
 
@@ -62,6 +97,48 @@ def getUnmappedModules() -> List[str]:
 	for _importer, modName, _ispkg in pkgutil.iter_modules(appModules.__path__):
 		modules.append(modName)
 	return modules
+
+
+def getRunningApps() -> List[str]:
+	# Executable names of the applications the user currently has open, used to populate the app picker
+	# so mappings can be chosen without typing. appModuleHandler.runningTable is not enough on its own:
+	# it only lists apps NVDA has already built an app module for this session, which misses many open
+	# apps. So enumerate the processes owning a visible, titled, top-level window (what the user can
+	# actually switch to) and merge in whatever NVDA is already tracking. Names come from the helper
+	# NVDA uses to match executables, so they are lowercased and can be compared and stored as-is.
+	processIDs = set()
+
+	@ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
+	def collect(hwnd, _lParam):
+		try:
+			if winUser.isWindowVisible(hwnd) and winUser.getWindowText(hwnd):
+				processIDs.add(winUser.getWindowThreadProcessID(hwnd)[0])
+		except Exception:
+			pass
+		return True
+
+	try:
+		ctypes.windll.user32.EnumWindows(collect, 0)
+	except Exception:
+		log.debugWarning("Could not enumerate top-level windows", exc_info=True)
+
+	apps = set()
+	for processID in processIDs:
+		try:
+			appName = appModuleHandler.getAppNameFromProcessID(processID, includeExt=False)
+		except Exception:
+			continue
+		if appName:
+			apps.add(appName)
+	for mod in list(appModuleHandler.runningTable.values()):
+		try:
+			if mod.appName:
+				apps.add(mod.appName)
+		except Exception:
+			continue
+	# NVDA itself is never a meaningful mapping target.
+	apps.discard("nvda")
+	return sorted(apps)
 
 
 def getAllAvailableAppModules() -> List[str]:
@@ -120,18 +197,40 @@ def migrateLegacyMappingsFile():
 		log.error(f"Could not migrate custom mappings file: {e}")
 
 
+def dedupeMappings(mappings: List[Mapping]) -> List[Mapping]:
+	# Guarantee at most one mapping per application. Executables are matched by their lowercased name,
+	# so applications are compared case-insensitively; later entries win, keeping the most recent choice.
+	# This protects the persisted file from ever holding duplicates, even if a caller passes some in.
+	byApp = {}
+	for mapping in mappings:
+		byApp[mapping.app.lower()] = mapping
+	return list(byApp.values())
+
+
 def persist():
+	global customModulesMapping
+	customModulesMapping = dedupeMappings(customModulesMapping)
 	with open(getCustomMappingsFilePath(), "wb") as f:
-		pickle.dump(customModulesMapping, f)
+		pickle.dump({"formatVersion": PICKLE_FORMAT_VERSION, "mappings": customModulesMapping}, f)
 	log.info("Custom mappings saved to file")
+
+
+def readMappingsFile(path) -> List[Mapping]:
+	# Returns the list of Mapping objects stored at path, understanding both the current versioned
+	# format (a dict with "formatVersion" and "mappings") and the original bare list of Mapping objects
+	# written before 1.0 (treated as format version 0). Future format changes branch on the version here.
+	with open(path, "rb") as f:
+		data = pickle.load(f)
+	if isinstance(data, dict):
+		return data.get("mappings", [])
+	return data
 
 
 def loadCustomMappings():
 	global customModulesMapping
 	migrateLegacyMappingsFile()
 	try:
-		with open(getCustomMappingsFilePath(), "rb") as f:
-			customModulesMapping = pickle.load(f)
+		customModulesMapping = dedupeMappings(readMappingsFile(getCustomMappingsFilePath()))
 		log.info("Custom mappings loaded from file")
 		mustRestart = False
 		for mapping in customModulesMapping:
